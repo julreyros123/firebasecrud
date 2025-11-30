@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'services/crud_services.dart';
 import 'services/auth_service.dart';
 import 'login_page.dart';
+import 'cloudinary_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,6 +20,8 @@ class _HomePageState extends State<HomePage> {
   final TextEditingController nameCtrl = TextEditingController();
   final TextEditingController qtyCtrl = TextEditingController();
   bool _showFavoritesOnly = false;
+  final ImagePicker _picker = ImagePicker();
+  String? _imageUrl;
 
   @override
   void dispose() {
@@ -26,9 +30,29 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
+  Future<void> _pickAndUploadImage() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile == null) return;
+
+    try {
+      final bytes = await pickedFile.readAsBytes();
+      final url = await CloudinaryService.uploadBytes(bytes, pickedFile.name);
+      if (!mounted) return;
+      setState(() {
+        _imageUrl = url;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Image upload failed: $e')));
+    }
+  }
+
   void openAddDialog() {
     nameCtrl.clear();
     qtyCtrl.clear();
+    _imageUrl = null;
 
     showDialog(
       context: context,
@@ -46,6 +70,17 @@ class _HomePageState extends State<HomePage> {
               decoration: const InputDecoration(labelText: 'Quantity'),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _pickAndUploadImage,
+              icon: const Icon(Icons.image),
+              label: const Text('Choose Image'),
+            ),
+            if (_imageUrl != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Image.network(_imageUrl!, height: 80, fit: BoxFit.cover),
+              ),
           ],
         ),
         actions: [
@@ -57,7 +92,11 @@ class _HomePageState extends State<HomePage> {
             onPressed: () async {
               if (nameCtrl.text.isNotEmpty && qtyCtrl.text.isNotEmpty) {
                 try {
-                  await service.addItem(nameCtrl.text, qtyCtrl.text);
+                  await service.addItem(
+                    nameCtrl.text,
+                    qtyCtrl.text,
+                    imageUrl: _imageUrl,
+                  );
                   if (mounted) {
                     Navigator.pop(context);
                   }
@@ -80,6 +119,8 @@ class _HomePageState extends State<HomePage> {
   void openEditDialog(QueryDocumentSnapshot item) {
     nameCtrl.text = item['name'];
     qtyCtrl.text = item['quantity'];
+    final existingImage = (item['imageUrl'] ?? '').toString();
+    _imageUrl = existingImage.isEmpty ? null : existingImage;
 
     showDialog(
       context: context,
@@ -97,6 +138,17 @@ class _HomePageState extends State<HomePage> {
               decoration: const InputDecoration(labelText: 'Quantity'),
               keyboardType: TextInputType.number,
             ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: _pickAndUploadImage,
+              icon: const Icon(Icons.image),
+              label: const Text('Change Image'),
+            ),
+            if (_imageUrl != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Image.network(_imageUrl!, height: 80, fit: BoxFit.cover),
+              ),
           ],
         ),
         actions: [
@@ -112,6 +164,7 @@ class _HomePageState extends State<HomePage> {
                     item.id,
                     nameCtrl.text,
                     qtyCtrl.text,
+                    imageUrl: _imageUrl,
                   );
                   if (mounted) {
                     Navigator.pop(context);
@@ -205,8 +258,17 @@ class _HomePageState extends State<HomePage> {
                 final String name = (data?['name'] ?? '').toString();
                 final String quantity = (data?['quantity'] ?? '').toString();
                 final bool isFavorite = (data?['isFavorite'] as bool?) ?? false;
+                final String imageUrl = (data?['imageUrl'] ?? '').toString();
 
                 return ListTile(
+                  leading: imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                        )
+                      : const Icon(Icons.image_not_supported),
                   title: Text(name.isEmpty ? 'Unnamed item' : name),
                   subtitle: Text(
                     quantity.isEmpty ? 'No quantity set' : 'Qty: $quantity',

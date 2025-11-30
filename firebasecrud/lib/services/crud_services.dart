@@ -9,10 +9,11 @@ class CrudServices {
     return _items.orderBy('name').snapshots();
   }
 
-  Future<void> addItem(String name, String quantity) {
+  Future<void> addItem(String name, String quantity, {String? imageUrl}) {
     return _items.add({
       'name': name,
       'quantity': quantity,
+      'imageUrl': imageUrl ?? '',
       'isFavorite': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -23,6 +24,7 @@ class CrudServices {
     String name,
     String quantity, {
     bool? isFavorite,
+    String? imageUrl,
   }) {
     final Map<String, dynamic> updateData = {
       'name': name,
@@ -30,6 +32,9 @@ class CrudServices {
     };
     if (isFavorite != null) {
       updateData['isFavorite'] = isFavorite;
+    }
+    if (imageUrl != null) {
+      updateData['imageUrl'] = imageUrl;
     }
     return _items.doc(id).update(updateData);
   }
